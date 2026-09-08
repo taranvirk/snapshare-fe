@@ -1,199 +1,136 @@
-import { useAuth, supabase } from '../../../auth/Auth'
-import { useCallback } from 'react'
-import { useDropzone } from 'react-dropzone'
-import { useState } from 'react'
-import { XMarkIcon } from '@heroicons/react/24/solid'
-import { useNavigate } from "react-router-dom"
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useDropzone } from "react-dropzone";
+import { useNavigate } from "react-router-dom";
+import { ArrowUpTrayIcon, PhotoIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import toast from "react-hot-toast";
+import { useAuth, supabase } from "../../../auth/Auth";
 
-const CreatePost = () => {
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  
-  const [files, setFiles] = useState([])
-  const [caption, setCaption] = useState('')
-  const errorMessages = []
-  var urlList = []
-  
-  var postId = 0
+const MAX_FILES = 6;
+const MAX_CAPTION = 500;
 
-  {/** Drag and Drop functionality */}
+export default function CreatePost() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const [files, setFiles] = useState([]);
+  const [caption, setCaption] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [progress, setProgress] = useState(0);
+
   const onDrop = useCallback((acceptedFiles, rejectedFiles) => {
-    if (acceptedFiles?.length) {
-      setFiles(previousFiles => [
-        ...previousFiles,
-        ...acceptedFiles.map(file =>
-          Object.assign(file, { preview: URL.createObjectURL(file) })
-          )
-      ])
-    }
-    
-    {/** Rejected Files error handling. Shows alert with reject file and reason for rejection */}
-    if (rejectedFiles?.length) {
-      rejectedFiles.forEach(({ file, errors })=> {
-        errorMessages.push(`FILE REJECTED: ${file.name} \n`)
-        errors.forEach(error => {
-          errorMessages.push(error.message)
-        })
-      })
-      const errorMessage = errorMessages.join('\n')
-      alert(errorMessage)
-    }
-  }, [])
+    if (rejectedFiles.length) toast.error("Use images or videos under 15 MB.");
+    setFiles((current) => {
+      const remaining = MAX_FILES - current.length;
+      if (acceptedFiles.length > remaining) toast.error(`You can add up to ${MAX_FILES} files.`);
+      return [...current, ...acceptedFiles.slice(0, remaining).map((file) => ({ file, preview: URL.createObjectURL(file) }))];
+    });
+  }, []);
 
-  const {getRootProps, getInputProps, isDragActive } = useDropzone({ 
-    onDrop, 
-    accept: {
-    'image/*': [],
-    'video/*': []
-  },
-  maxSize: 10485760,
-})
+  useEffect(() => () => files.forEach(({ preview }) => URL.revokeObjectURL(preview)), [files]);
 
-  {/** Remove file from preview */}
-  const removeFile = (fileName) => {
-    setFiles(files => files.filter(file => file.name !== fileName))
-  }
+  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+    onDrop,
+    noClick: true,
+    noKeyboard: true,
+    maxFiles: MAX_FILES,
+    maxSize: 15 * 1024 * 1024,
+    accept: { "image/*": [], "video/*": [] },
+  });
 
-  {/** Submit post to database */}
-  const handleSubmit = async (e) => {
-    e.preventDefault()
+  const remainingCharacters = MAX_CAPTION - caption.length;
+  const canPublish = files.length > 0 && caption.trim() && !submitting;
+  const heroPreview = useMemo(() => files[0], [files]);
 
-    {/** Check if all form values are filled in */}
-    if (!files?.length) {
-      alert('Please select at least one file to upload.')
-      return
-    }
-    else if (!caption) {
-      alert('Please enter a caption for your post.')
-      return
-    }
-    
-    {/** Insert post into database */}
-    const { data: postData, error: postError } = await supabase
-    .from('posts')
-    .insert([{ user_id: user.id , caption: caption }])
-    .select()
+  const removeFile = (preview) => {
+    URL.revokeObjectURL(preview);
+    setFiles((current) => current.filter((item) => item.preview !== preview));
+  };
 
-    if (postError) {
-      console.log(postError)
-    }
-    if (postData) {
-      postId = postData[0].post_id
-      navigate('/')
-    }
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    if (!files.length) return toast.error("Add at least one photo or video.");
+    if (!caption.trim()) return toast.error("Give your post a caption.");
 
-    {/** Upload files to storage */}
-    for (let index = 0; index < files.length; index++) {
-      const file = files[index];
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from(`Upload/${user.id}/${postId}`)
-        .upload(`./${file.name}`, file)
-      
-      if (uploadError) {
-        console.log(uploadError)
+    setSubmitting(true);
+    setProgress(5);
+    try {
+      const { data: postRows, error: postError } = await supabase.from("posts").insert({ user_id: user.id, caption: caption.trim() }).select("post_id");
+      if (postError) throw postError;
+      const postId = postRows[0].post_id;
+      const urls = [];
+
+      for (let index = 0; index < files.length; index += 1) {
+        const { file } = files[index];
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+        const path = `${user.id}/${postId}/${Date.now()}-${index}-${safeName}`;
+        const { error: uploadError } = await supabase.storage.from("Upload").upload(path, file, { cacheControl: "3600", upsert: false });
+        if (uploadError) throw uploadError;
+        const { data } = supabase.storage.from("Upload").getPublicUrl(path);
+        urls.push(data.publicUrl);
+        setProgress(Math.round(((index + 1) / files.length) * 80) + 10);
       }
 
-      {/** If file uploaded successfully, get file url from storage */}
-      if (uploadData) {
-        const { data: urlData } = await supabase
-        .storage
-        .from('Upload')
-        .getPublicUrl(`${user.id}/${postId}/${file.name}`)
-        urlList.push(urlData.publicUrl)
-
-        {/** If this is the last file in the loop, update post with the list of file urls */}
-        if (index === (files.length - 1)) {
-          const { error } = await supabase
-            .from('posts')
-            .update([{ file_url: urlList }])
-            .eq('post_id', postId)
-
-          if (error) {
-            console.log(error)
-          }
-        }
-      }
-    } 
-
-    setFiles([])
-    setCaption('')
-    urlList = []
-  }
+      const { error: updateError } = await supabase.from("posts").update({ file_url: urls }).eq("post_id", postId).eq("user_id", user.id);
+      if (updateError) throw updateError;
+      setProgress(100);
+      toast.success("Your post is live.");
+      navigate(`/post/${postId}`);
+    } catch (error) {
+      toast.error(error.message || "Your post couldn't be published.");
+      setSubmitting(false);
+      setProgress(0);
+    }
+  };
 
   return (
-    <main className="ml-0 md:ml-64">
-      <form className="p-9 w-full" onSubmit={handleSubmit}>
-        <div className="text-3xl font-bold text-center">Create a Post</div>
-        <div {...getRootProps({
-          className: 'p-16 mt-10 border border-neutral-200'
-        })}>
+    <main className="page">
+      <header className="page-heading page-heading--centered"><div><span className="eyebrow">Make something memorable</span><h1>Create a post</h1><p>Add up to six photos or videos and tell the story behind them.</p></div></header>
+
+      <form className="create-card" onSubmit={handleSubmit}>
+        <section className="create-media" {...getRootProps()}>
           <input {...getInputProps()} />
-          {isDragActive ? (
-            <p>Drop files here ...</p>
+          {heroPreview ? (
+            <div className="create-preview">
+              {heroPreview.file.type.startsWith("image/") ? <img src={heroPreview.preview} alt="Post preview" /> : <video src={heroPreview.preview} controls />}
+              <button type="button" className="button button--glass create-preview__replace" onClick={open}><PhotoIcon />Add media</button>
+            </div>
           ) : (
-            <p className="text-center"> Drag and drop some files here, or click to select files</p>
+            <button type="button" className={`dropzone ${isDragActive ? "dropzone--active" : ""}`} onClick={open}>
+              <span className="dropzone__icon"><ArrowUpTrayIcon /></span>
+              <strong>{isDragActive ? "Drop it right here" : "Choose photos or videos"}</strong>
+              <small>or drag them here · JPG, PNG, WEBP, MP4 · 15 MB max</small>
+              <span className="button button--secondary">Browse files</span>
+            </button>
           )}
-        </div>
-        
-        {files.length > 0 && (
-          <h3 className='title text-lg font-semibold text-white mt-10 border-b pb-3'>
-            Accepted Files
-          </h3>
-        )}
-        {/** Preview */}
+        </section>
 
-        <ul className="mt-6 grid grid-cols-3 md:grid-cols-4 xl:grid-cols-8 gap-10">
-          {files.map(file => (
-            <li key={file.name} className="relative rounded-md">
-              {file.type.startsWith('image') ? (
-                <img 
-                src={file.preview}
-                alt=''
-                onLoad={() => {
-                  URL.revokeObjectURL(file.preview)
-                }}
-                className="h-auto w-full object-cover rounded-md"
-                />
-              ) : (
-                <video
-                src={file.preview}
-                className="h-auto w-full object-cover rounded-md"
-                />
-              )}
-              
-              <button 
-                type="button"
-                className="w-7 h-7 border rounded-full flex justify-center items-center absolute -top-3 -right-3 bg-red-400 hover:bg-neutral-400 transition-colors"
-                onClick={() => removeFile(file.name)}
-              >
-                <XMarkIcon className="w-5 h-5 fill-white hover:fill-secondary-400 transition-colors" />
-              </button>
-              <p className="mt-2 text-white text-[12px] font-medium">
-                {file.name}
-              </p>
-              </li>
-          ))}
-        </ul>
+        <section className="create-details">
+          <div className="field-group">
+            <div className="field-label"><label htmlFor="caption">Caption</label><span className={remainingCharacters < 40 ? "field-count field-count--low" : "field-count"}>{remainingCharacters}</span></div>
+            <textarea id="caption" rows="7" maxLength={MAX_CAPTION} value={caption} onChange={(event) => setCaption(event.target.value)} placeholder="What’s the story behind this moment?" />
+          </div>
 
-        <textarea 
-          className="w-full h-1/4 mt-10 text-black p-2"
-          placeholder='Enter the caption for your post'
-          value={caption}
-          onChange={e => setCaption(e.target.value)}
-          >
-        </textarea>
-        <div className="flex justify-center">
-          <button
-            type="submit"
-            className="mt-3 text-md uppercase tracking-wider font-bold text-black border rounded-md px-3 py-2 mb-8 bg-neutral-400 hover:bg-neutral-500 transition-colors"
-          >
-            Upload
-          </button>
-        </div>
-        
+          {files.length > 0 && (
+            <div className="upload-tray">
+              <div className="field-label"><span>Media</span><span>{files.length}/{MAX_FILES}</span></div>
+              <div className="upload-grid">
+                {files.map(({ file, preview }, index) => (
+                  <div className={`upload-thumb ${index === 0 ? "upload-thumb--active" : ""}`} key={preview}>
+                    {file.type.startsWith("image/") ? <img src={preview} alt={file.name} /> : <video src={preview} muted />}
+                    <button type="button" onClick={() => removeFile(preview)} aria-label={`Remove ${file.name}`}><XMarkIcon /></button>
+                    {index === 0 && <span>Cover</span>}
+                  </div>
+                ))}
+                {files.length < MAX_FILES && <button type="button" className="upload-add" onClick={open}><PhotoIcon /><span>Add</span></button>}
+              </div>
+            </div>
+          )}
+
+          <div className="create-tips"><strong>A good post feels like you.</strong><span>Use an inviting cover, add a little context, and keep it genuine.</span></div>
+
+          {submitting && <div className="progress"><span style={{ width: `${progress}%` }} /></div>}
+          <div className="create-actions"><button className="button button--ghost" type="button" onClick={() => navigate(-1)}>Cancel</button><button className="button button--primary" type="submit" disabled={!canPublish}>{submitting ? `Publishing ${progress}%` : "Publish post"}</button></div>
+        </section>
       </form>
     </main>
-  )
+  );
 }
-
-export default CreatePost

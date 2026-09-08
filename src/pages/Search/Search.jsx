@@ -1,208 +1,87 @@
-import { useAuth, supabase } from "../../auth/Auth";
-import React, { useState, useEffect } from 'react';
-import { Link } from "react-router-dom"
-import './Search.css'
-import Comment from '../Profile/Content/Comment';
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { MagnifyingGlassIcon, PhotoIcon, UserGroupIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { supabase } from "../../auth/Auth";
+import Avatar from "../../components/Avatar/Avatar";
+import EmptyState from "../../components/EmptyState/EmptyState";
+
+function isImage(url = "") { return /\.(jpg|jpeg|png|gif|webp|svg|avif)(\?.*)?$/i.test(url); }
 
 export default function Search() {
-    const { userA } = useAuth();
-    const [users, setUsers] = useState([]);
-    const [posts, setPosts] = useState([]);
-    const [post2, setPost2] = useState([]);
-    const [query, setQuery] = useState("");
-    const [query2, setQuery2] = useState("");
+  const [users, setUsers] = useState([]);
+  const [posts, setPosts] = useState([]);
+  const [authors, setAuthors] = useState({});
+  const [query, setQuery] = useState("");
+  const [tab, setTab] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-    // Gets the user profile 
-    async function getUsers() {
-        try {
-            const { data, error } = await supabase
-            .from('users123')
-            .select('*');
-
-            if (error) throw error;
-            
-            if (data != null) {
-                setUsers(data);
-            }
-        } catch (error) {
-            alert(error.essage);
-        }
-    }
-
-    //get posts 
-    async function getPosts() {
-        try {
-        const { data, error } = await supabase
-            .from('posts')
-            .select('*')
-            .order('post_id', { ascending:false });     //recent post first
-    
-        if (error) throw error;
-    
-        if (data != null) {
-            setPosts(data);
-        }
-        } catch (error) {
-          alert(error.message);
-        }
+  useEffect(() => {
+    let active = true;
+    async function loadDiscovery() {
+      try {
+        const [{ data: userRows, error: usersError }, { data: postRows, error: postsError }] = await Promise.all([
+          supabase.from("public_profiles").select("user_id, username, user_bio, profile_picture_url").order("username").limit(60),
+          supabase.from("posts").select("*").order("post_id", { ascending: false }).limit(60),
+        ]);
+        if (usersError || postsError) throw usersError || postsError;
+        if (!active) return;
+        const profiles = userRows ?? [];
+        setUsers(profiles);
+        setPosts(postRows ?? []);
+        setAuthors(Object.fromEntries(profiles.map((profile) => [profile.user_id, profile])));
+      } catch (loadError) {
+        if (active) setError(loadError.message || "Discovery is unavailable right now.");
+      } finally {
+        if (active) setLoading(false);
       }
-
-    useEffect(() => {
-        getUsers(); 
-        getPosts();
-    }, [])
-    
-
-    //pop up form
-    function openImg(postId){
-        document.getElementById("imagePop").style.display = "block";
-        posts.map((post)=>{
-        if(post.post_id==postId){
-            setPost2({ post_id:post.post_id, user_id:post.user_id, image_url:post.image_url, caption:post.caption, created_at: post.created_at, file_url: post.file_url})
-        }
-        })
-    } 
-
-    function closeImg(){
-        document.getElementById("imagePop").style.display = "none";
-    } 
-
-    //image carousel
-    var slides;
-    function getSlides(fileURL){   
-    slides = fileURL;    
     }
+    loadDiscovery();
+    return () => { active = false; };
+  }, []);
 
-        //move between images/videos
-    const [curr, setCurr] = useState(0);
+  const normalized = query.trim().toLowerCase();
+  const filteredUsers = useMemo(() => users.filter((profile) => !normalized || profile.username?.toLowerCase().includes(normalized) || profile.user_bio?.toLowerCase().includes(normalized)), [normalized, users]);
+  const filteredPosts = useMemo(() => posts.filter((post) => !normalized || post.caption?.toLowerCase().includes(normalized) || authors[post.user_id]?.username?.toLowerCase().includes(normalized)), [authors, normalized, posts]);
 
-    const prev = () => {
-        //if first slide, go to last, else forward
-        setCurr((curr) => (curr == 0 ? (slides.length - 1) : (curr - 1)));
-    }
-        
-
-    const next = () => {
-        //if last slide, go to first, else next
-        setCurr((curr) => (curr == (slides.length - 1) ? (0) : (curr + 1)));
-    }
-
-    //determine if image or video
-    function isImageLink(url) {
-        const imageExtensions = /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i;
-        return imageExtensions.test(url);
-    }
-
-    function isVideoLink(url) {
-        const videoExtensions = /\.(mp4|webm|ogg|avi|mkv|mov)$/i;
-        return videoExtensions.test(url);
-    }
-
-    return (
-    <>
-      <main className="ml-0 md:ml-64">
-        <div class="content-container">
-            <div class="content-container p-9 block">
-                {/* User Search */}
-                <h1 className="text-3xl font-bold text-center">Search Page</h1>
-                <br/>
-                <h1 className="text-xl font-bold">User Search</h1>
-                <div class="search_bar">
-                    <input type="text" placeholder="Search users..." className="search" onChange={e => setQuery(e.target.value)}/>
-                    <div class="search_results">
-                        <ul className="list">
-                            {users.filter((user) =>
-                                user.username.toLowerCase().includes(query)).map((user) => (
-                                  <Link to={`/${user.username}`}>
-                                    <li key={user.user_id} className="listItem">
-                                      <span>{user.username}</span>
-                                    </li>
-                                  </Link>  
-                            ))}
-                        </ul>
-                    </div>
-
-                </div>
-                
-                <br/>
-                {/* Post Search */}
-                <h1 className="text-xl font-bold">Post Search</h1>
-                <div class="search_bar">
-                    <input type="text" placeholder="Search posts..." className="search" onChange={e => setQuery2(e.target.value)}/>
-                    <div class="search_results">
-                        <ul className="list">
-                            {posts.filter((post) =>
-                                post.caption.toLowerCase().includes(query2)).map((post) => (
-                                <div>
-                                    <li key={post.post_id} className="listItem" onClick={()=>{openImg(post.post_id)}}>{post.caption}</li>
-                                    
-                                   {/* <Comment postId={post.post_id} user_id={post.user_id} /> */}
-
-                                    {/* Popup image */}     
-                                    <div class="popup" id="imagePop">
-                                        <button onClick={()=>{closeImg()}}>&times;</button>
-
-                                        <div class="flex">                                           
-                                            <img src="https://cdn141.picsart.com/357697367045201.jpg" class="profile_image" />
-                                            <div className="block">              
-                                                <h3><a href={post2.user_id}>{post2.user_id}</a></h3>
-                                                <p class="right">{post2.created_at}</p>
-                                            </div>                                           
-                                        </div>
-
-                                        
-
-                                        {/* Image Carousel */}  
-                                        <div class="center"> 
-                                            <div class="carousel_container">
-                                                {/* Image Carousel in edit */}
-                                                {getSlides(post2.file_url)}
-                                            
-                                                <div class="carousel" style={{ transform: `translateX(-${curr * 100}%)` }}>
-                                                {Array.isArray(slides) ? (
-                                                    slides.map((slide) => (
-                                                    isImageLink(slide) ? (
-                                                        <img src={slide} alt="Image" class="carousel_content"/>
-                                                    ) : isVideoLink(slide) ? (
-                                                        <video src={slide} controls loop class="carousel_content" />
-                                                    ) : (
-                                                        <h1 class="carousel_content">No media</h1>
-                                                    )
-                                                    ))
-                                                ) : (
-                                                    <h1>No slides to display</h1>
-                                                )}
-                                                </div>
-                                            </div> 
-                                        </div> 
-                                
-                                        <div width="600px">
-                                            <button onClick={prev}>Prev</button>  
-                                            <button class="right" onClick={next}>Next</button>                                          
-                                            <h3 class="caption">{post2.caption}</h3>
-                                            <br/>
-                                        </div>
-
-                                        <Comment postId={post2.post_id} user_id={post2.user_id} />                    
-                                    </div>
-                                
-
-                                    <Link to={`/post/${post.post_id}`}>
-                                        <li key={post.post_id} className="listItem">
-                                        <span>{post.caption}</span>
-                                        </li>
-                                    </Link>                             
-
-                                </div>   
-                            ))}
-                        </ul>
-                    </div>
-
-                </div>
-            </div>
+  return (
+    <main className="page page--wide">
+      <header className="discover-header">
+        <span className="eyebrow">Find your next favorite</span>
+        <h1>Discover</h1>
+        <p>Search people, ideas, and the moments being shared right now.</p>
+        <label className="search-box">
+          <MagnifyingGlassIcon />
+          <input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search people and posts" aria-label="Search people and posts" />
+          {query && <button onClick={() => setQuery("")} aria-label="Clear search"><XMarkIcon /></button>}
+        </label>
+        <div className="filter-tabs" role="tablist">
+          {[{ id: "all", label: "Everything" }, { id: "people", label: "People" }, { id: "posts", label: "Posts" }].map(({ id, label }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? "active" : ""} onClick={() => setTab(id)}>{label}</button>)}
         </div>
+      </header>
 
-      </main>
-    </>
-  )
+      {loading && <div className="discovery-loading"><span className="spinner" />Loading discovery</div>}
+      {!loading && error && <EmptyState icon={<MagnifyingGlassIcon />} title="Discovery took a break" body={error} />}
+
+      {!loading && !error && (tab === "all" || tab === "people") && (
+        <section className="discovery-section">
+          <div className="section-heading"><div><span className="section-heading__icon"><UserGroupIcon /></span><h2>{normalized ? "People" : "People worth meeting"}</h2></div><span>{filteredUsers.length} results</span></div>
+          {filteredUsers.length ? <div className="people-grid">{filteredUsers.slice(0, tab === "all" ? 8 : 40).map((profile) => (
+            <Link className="person-card" to={`/${profile.username}`} key={profile.user_id}><Avatar src={profile.profile_picture_url} name={profile.username} size="lg" /><div><strong>{profile.username}</strong><p>{profile.user_bio || "Sharing life, one snap at a time."}</p></div><span>View profile ↗</span></Link>
+          ))}</div> : <EmptyState icon={<UserGroupIcon />} title="No people found" body="Try a shorter name or a different spelling." />}
+        </section>
+      )}
+
+      {!loading && !error && (tab === "all" || tab === "posts") && (
+        <section className="discovery-section">
+          <div className="section-heading"><div><span className="section-heading__icon"><PhotoIcon /></span><h2>{normalized ? "Posts" : "Fresh from the community"}</h2></div><span>{filteredPosts.length} results</span></div>
+          {filteredPosts.length ? <div className="post-grid">{filteredPosts.slice(0, tab === "all" ? 12 : 60).map((post) => {
+            const media = post.file_url?.[0] ?? post.image_url;
+            const author = authors[post.user_id];
+            return <Link className="post-tile" to={`/post/${post.post_id}`} key={post.post_id}>{media ? (isImage(media) ? <img src={media} alt={post.caption || "Post"} /> : <video src={media} muted preload="metadata" />) : <span className="post-tile__empty"><PhotoIcon /></span>}<div className="post-tile__overlay"><strong>{author?.username || "Snapshare member"}</strong><p>{post.caption}</p></div></Link>;
+          })}</div> : <EmptyState icon={<PhotoIcon />} title="No posts found" body="Try another keyword or browse everything." />}
+        </section>
+      )}
+    </main>
+  );
 }

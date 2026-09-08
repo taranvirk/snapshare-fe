@@ -1,71 +1,50 @@
+import { useEffect, useState } from "react";
+import { ChevronLeftIcon, ChevronRightIcon } from "@heroicons/react/24/solid";
+import PropTypes from "prop-types";
 
-import { useState } from "react";
+function isImage(url = "") {
+  const cleanUrl = url.split("?")[0].toLowerCase();
+  return /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff|avif)$/.test(cleanUrl);
+}
 
-export default function Carousel({ images, cover }) {
-  // carousel component, takes in an array of image urls
-  const [currentIndex, setCurrentIndex] = useState(0)
-  
-  const prevSlide = () => {
-    const isFirstSlide = currentIndex === 0
-    const newIndex = isFirstSlide ? images.length - 1 : currentIndex - 1
-    setCurrentIndex(newIndex)
+Carousel.propTypes = {
+  images: PropTypes.arrayOf(PropTypes.string),
+  cover: PropTypes.bool,
+  label: PropTypes.string,
+};
+
+export default function Carousel({ images = [], cover = false, label = "Post media" }) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => setCurrentIndex(0), [images]);
+
+  if (!images.length) {
+    return <div className="media-empty">No media attached</div>;
   }
 
-  const nextSlide = () => {
-    const isLastSlide = currentIndex === images.length - 1
-    const newIndex = isLastSlide ? 0 : currentIndex + 1
-    setCurrentIndex(newIndex)
-  }
-
-  function isImage(url) {
-    const imageExtensions = /\.(jpg|jpeg|png|gif|bmp|webp|svg|tiff)$/i;
-    if (imageExtensions.test(url)) return true
-    return false
-  }
+  const previous = () => setCurrentIndex((index) => index === 0 ? images.length - 1 : index - 1);
+  const next = () => setCurrentIndex((index) => index === images.length - 1 ? 0 : index + 1);
+  const current = images[currentIndex];
 
   return (
-    <div className="max-w-[1400px] h-[650px] w-full m-auto relative group">
-      <div className="w-full h-full">
-      {isImage(images[currentIndex]) ? (
-        <>
-          {cover ? (
-            <img src={images[currentIndex]} alt="post-image" className="h-full w-full object-cover" />  
-          ) : (
-            <img src={images[currentIndex]} alt="post-image" className="h-full w-full object-contain" />
-          )}
-        </>
+    <div className={`carousel ${cover ? "carousel--cover" : ""}`} aria-label={label}>
+      {isImage(current) ? (
+        <img src={current} alt={`${label} ${currentIndex + 1} of ${images.length}`} />
       ) : (
-       <video src={images[currentIndex]} controls loop className="h-full w-full object-cover" />
+        <video src={current} controls playsInline preload="metadata" aria-label={`${label} ${currentIndex + 1} of ${images.length}`} />
       )}
 
-      </div>
-      {/* Left Arrow */}
-      <button onClick={prevSlide} className="hidden group-hover:block absolute top-[50%] -translate-x-0 translate-y-[-50%] left-2 text-xl rounded-full p-1 bg-white/50">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="gray" className="w-5 h-5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-        </svg>
-      </button>
-
-      {/* Right Arrow */}
-      <button onClick={nextSlide} className="hidden group-hover:block absolute top-[50%] -translate-x-0 translate-y-[-50%] right-2 text-xl rounded-full p-1 bg-white/50">
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="gray" className="w-5 h-5">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-        </svg>
-      </button>
-
-      <div className="absolute bottom-0 flex justify-center w-full">
-        <div className="flex justify-center py-2 ">
-          {images.map((slide, slideIndex) => (
-            <button key={slideIndex} onClick={() => setCurrentIndex(slideIndex)}>
-              {slideIndex === currentIndex ? (
-                <img src="/icons/dot-filled.svg" className="w-3" />
-                ) : (
-                <img src="/icons/dot-unfilled.svg" className="w-3" />
-              )}
-            </button>
-          ))}
-        </div>
-      </div>
+      {images.length > 1 && (
+        <>
+          <button className="carousel__arrow carousel__arrow--left" onClick={previous} aria-label="Previous media"><ChevronLeftIcon /></button>
+          <button className="carousel__arrow carousel__arrow--right" onClick={next} aria-label="Next media"><ChevronRightIcon /></button>
+          <div className="carousel__dots" aria-label={`Media ${currentIndex + 1} of ${images.length}`}>
+            {images.map((_, index) => (
+              <button key={index} className={index === currentIndex ? "active" : ""} onClick={() => setCurrentIndex(index)} aria-label={`Show media ${index + 1}`} />
+            ))}
+          </div>
+        </>
+      )}
     </div>
-  )
+  );
 }

@@ -1,10 +1,8 @@
-import Login from "../pages/Login/Login"
-import { useNavigate } from "react-router-dom"
+import { Navigate } from "react-router-dom";
+import PropTypes from "prop-types";
 
 export default function PrivateRoute({ user, children }) {
-  const navigate = useNavigate()  
-  if (!user) {
-    navigate("/")
-  } 
-  return children
+  return user ? children : <Navigate to="/login" replace />;
 }
+
+PrivateRoute.propTypes = { user: PropTypes.object, children: PropTypes.node.isRequired };

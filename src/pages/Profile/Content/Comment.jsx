@@ -1,194 +1,69 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth, supabase } from '../../../auth/Auth';
-import './Comment.css';
-import PropTypes from 'prop-types';
+import { useCallback, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
+import { PaperAirplaneIcon, PencilIcon, TrashIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import toast from "react-hot-toast";
+import { useAuth, supabase } from "../../../auth/Auth";
+import Avatar from "../../../components/Avatar/Avatar";
+import { getRelativeDate } from "../../../utils/DateFormatter";
+import PropTypes from "prop-types";
 
-function Comment({ postId, user_id }) {
+export default function Comment({ postId }) {
   const { user } = useAuth();
   const [comments, setComments] = useState([]);
-  const [usernames, setUsernames] = useState({});
-  const [commentText, setCommentText] = useState('');
-  const [editingCommentId, setEditingCommentId] = useState(null);
+  const [authors, setAuthors] = useState({});
+  const [text, setText] = useState("");
+  const [editingId, setEditingId] = useState(null);
+  const [sending, setSending] = useState(false);
 
+  const fetchComments = useCallback(async () => {
+    const { data, error } = await supabase.from("comments_test").select("id, user_id, comment_text, created_at, updated_at").eq("post_id", postId).order("created_at", { ascending: true });
+    if (error) return;
+    const rows = data ?? [];
+    setComments(rows);
+    const ids = [...new Set(rows.map((comment) => comment.user_id))];
+    if (!ids.length) return setAuthors({});
+    const { data: profiles } = await supabase.from("public_profiles").select("user_id, username, profile_picture_url").in("user_id", ids);
+    setAuthors(Object.fromEntries((profiles ?? []).map((profile) => [profile.user_id, profile])));
+  }, [postId]);
 
-  //fetch
-  const fetchComments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('comments_test')
-        .select('id, user_id, comment_text, created_at, updated_at')
-        .eq('post_id', postId);
+  useEffect(() => { fetchComments(); }, [fetchComments]);
 
-      // if (error) {
-      //   console.error('Error fetching comments:', error);
-      // } else {
-      //   setComments(data);
-      // }
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-    }
+  const submit = async (event) => {
+    event.preventDefault();
+    const comment = text.trim();
+    if (!comment) return;
+    setSending(true);
+    const query = editingId
+      ? supabase.from("comments_test").update({ comment_text: comment, updated_at: new Date().toISOString() }).eq("id", editingId).eq("user_id", user.id)
+      : supabase.from("comments_test").insert({ post_id: postId, user_id: user.id, comment_text: comment });
+    const { error } = await query;
+    setSending(false);
+    if (error) return toast.error("Comment couldn't be saved.");
+    setText("");
+    setEditingId(null);
+    await fetchComments();
   };
 
-
-
-  useEffect(() => {
-
-    //fetch usernames
-    async function fetchUsernames() {
-      try {
-        const { data, error } = await supabase
-          .from('users123')
-          .select('user_id, username');
-
-        if (error) {
-          console.error('Error fetching usernames:', error);
-        } else {
-          const usernameMap = {};
-          data.forEach((user) => {
-            usernameMap[user.user_id] = user.username;
-          });
-          setUsernames(usernameMap);
-        }
-      } catch (error) {
-        console.error('Error fetching usernames:', error);
-      }
-    }
-
-    fetchComments();
-    fetchUsernames();
-  }, [postId, editingCommentId]);
-
-  const handleCommentSubmit = async () => {
-    if (!user) {
-      alert('You need to be logged in to comment.');
-      return;
-    }
-
-    if (!commentText) {
-      alert('Please enter a comment.');
-      return;
-    }
-
-    if (editingCommentId !== null) {
-      try {
-        await supabase
-          .from('comments_test')
-          .update({
-            comment_text: commentText,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', editingCommentId);
-
-        // Fetch the updated comments
-        await fetchComments();
-
-        setEditingCommentId(null);
-        setCommentText('');
-      } catch (error) {
-        console.error('Error updating comment:', error);
-        alert('An error occurred while updating your comment.');
-      }
-    } else {
-      const newComment = {
-        user_id: user.id,
-        comment_text: commentText,
-      };
-
-      setComments((prevComments) => [...prevComments, newComment]);
-
-      try {
-        await supabase
-          .from('comments_test')
-          .upsert([
-            {
-              post_id: postId,
-              user_id: user.id,
-              comment_text: commentText,
-            },
-          ]);
-
-        // Fetch the updated comments 
-        await fetchComments();
-
-        setCommentText('');
-      } catch (error) {
-        console.error('Error adding comment:', error);
-        alert('An error occurred while adding your comment.');
-      }
-    }
+  const edit = (comment) => { setEditingId(comment.id); setText(comment.comment_text); };
+  const cancelEdit = () => { setEditingId(null); setText(""); };
+  const remove = async (commentId) => {
+    const { error } = await supabase.from("comments_test").delete().eq("id", commentId).eq("user_id", user.id);
+    if (error) return toast.error("Comment couldn't be deleted.");
+    setComments((current) => current.filter((comment) => comment.id !== commentId));
   };
-
-  const handleEditComment = (commentId, commentText) => {
-    setEditingCommentId(commentId);
-    setCommentText(commentText);
-  };
-
-  const handleCancelEdit = () => {
-    setEditingCommentId(null);
-    setCommentText('');
-  };
-  
 
   return (
-    <div className="comment-container">
+    <section className="comments">
+      <div className="comments__heading"><h3>Conversation</h3><span>{comments.length}</span></div>
       <div className="comment-list">
-        {comments.map((comment) => (
-          <div className="comment" key={comment.id}>
-            <span className="comment-user">
-              {usernames[comment.user_id] || 'Unknown User'}
-            </span>
-            {editingCommentId === comment.id ? (
-              <>
-                <textarea
-                  className="textarea"
-                  value={commentText}
-                  onChange={(e) => setCommentText(e.target.value)}
-                  placeholder="Edit your comment..."
-                />
-                <button className="comment-button" onClick={handleCommentSubmit}>
-                  Update
-                </button>
-                <button className="comment-button" onClick={handleCancelEdit}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                <p className="comment-text">{comment.comment_text}</p>
-                {user && user.id === comment.user_id && (
-                  <button
-                    className="comment-button"
-                    onClick={() => handleEditComment(comment.id, comment.comment_text)}
-                  >
-                    Edit
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        ))}
+        {comments.length ? comments.map((comment) => {
+          const author = authors[comment.user_id] ?? { username: comment.user_id === user.id ? "You" : "Snapshare member" };
+          return <article className="comment-row" key={comment.id}><Link to={comment.user_id === user.id ? "/profile" : `/${author.username}`}><Avatar src={author.profile_picture_url} name={author.username} size="xs" /></Link><div><div className="comment-row__meta"><Link to={comment.user_id === user.id ? "/profile" : `/${author.username}`}>{author.username}</Link><span>{getRelativeDate(comment.updated_at || comment.created_at)}</span></div><p>{comment.comment_text}</p></div>{comment.user_id === user.id && <div className="comment-row__actions"><button onClick={() => edit(comment)} aria-label="Edit comment"><PencilIcon /></button><button onClick={() => remove(comment.id)} aria-label="Delete comment"><TrashIcon /></button></div>}</article>;
+        }) : <p className="comments__empty">No comments yet. Start the conversation.</p>}
       </div>
-
-      <div className="comment-input-container">
-        <textarea
-          className="textarea"
-          value={commentText}
-          onChange={(e) => setCommentText(e.target.value)}
-          placeholder="Add a comment..."
-        />
-        <button className="comment-button" onClick={handleCommentSubmit}>
-          Post
-        </button>
-      </div>
-    </div>
+      <form className="comment-composer" onSubmit={submit}><input value={text} maxLength="280" onChange={(event) => setText(event.target.value)} placeholder={editingId ? "Update your comment" : "Add a thoughtful comment"} aria-label="Comment" />{editingId && <button type="button" className="comment-composer__cancel" onClick={cancelEdit} aria-label="Cancel editing"><XMarkIcon /></button>}<button type="submit" disabled={!text.trim() || sending} aria-label={editingId ? "Update comment" : "Post comment"}><PaperAirplaneIcon /></button></form>
+    </section>
   );
 }
 
-Comment.propTypes = {
-  postId: PropTypes.number.isRequired,
-  user_id: PropTypes.string,
-};
-
-export default Comment;
-
-
+Comment.propTypes = { postId: PropTypes.number.isRequired };

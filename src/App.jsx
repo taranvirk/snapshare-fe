@@ -1,39 +1,67 @@
-import Home from './pages/Home/Home'
-import { useAuth } from './auth/Auth'
-import { Routes, Route, Navigate } from "react-router-dom"
-import Navbar from './components/Navbar/Navbar'
-import CreatePost from './pages/Create/CreatePost/CreatePost'
-import Content from './pages/Profile/Content/Content'
-import Settings from './pages/Profile/Settings/Settings'
-import Login from './pages/Login/Login'
-import Search from './pages/Search/Search'
-import PrivateRoute from './routes/PrivateRoute'
-import UserProfile from './pages/Profile/UserProfile/UserProfile'
-import PostPage from './pages/Post/PostPage'
-import ErrorPage from './pages/Error/ErrorPage'
-import DirectMessage from './pages/DirectMessage/DirectMessage'
+import { lazy, Suspense } from "react";
+import { Route, Routes } from "react-router-dom";
+import { Toaster } from "react-hot-toast";
+import { useAuth } from "./auth/Auth";
+import Navbar from "./components/Navbar/Navbar";
+import Login from "./pages/Login/Login";
+import Loader from "./components/Loader/Loader";
+import "./App.css";
+
+const Home = lazy(() => import("./pages/Home/Home"));
+const CreatePost = lazy(() => import("./pages/Create/CreatePost/CreatePost"));
+const DirectMessage = lazy(() => import("./pages/DirectMessage/DirectMessage"));
+const ErrorPage = lazy(() => import("./pages/Error/ErrorPage"));
+const Explore = lazy(() => import("./pages/Explore/Explore"));
+const Notifications = lazy(() => import("./pages/Notifications/Notifications"));
+const PostPage = lazy(() => import("./pages/Post/PostPage"));
+const Content = lazy(() => import("./pages/Profile/Content/Content"));
+const Settings = lazy(() => import("./pages/Profile/Settings/Settings"));
+const UserProfile = lazy(() => import("./pages/Profile/UserProfile/UserProfile"));
+const Search = lazy(() => import("./pages/Search/Search"));
 
 function App() {
-  const { user } = useAuth()
+  const { user } = useAuth();
+
   return (
     <>
-      <Routes>
-        <Route element={user ? <Navbar /> : <Login/>}>
-          <Route path="/" element={<PrivateRoute user={user}><Home /></PrivateRoute>} />
-          <Route path="/create-post" element={<PrivateRoute user={user}><CreatePost /></PrivateRoute>} /> 
-          <Route path="/profile" element={<PrivateRoute user={user}><Content /></PrivateRoute>} />
-          <Route path="/:username" element={<PrivateRoute user={user}><UserProfile /></PrivateRoute>} />
-          <Route path="/post/:postId" element={<PrivateRoute user={user}><PostPage /></PrivateRoute>} />
-          <Route path="/direct-message" element={<PrivateRoute user={user}><DirectMessage /></PrivateRoute>}/>
-          <Route path="/something" element={<Navigate to="/" replace />} />
-          <Route path="/settings" element={<PrivateRoute user={user}><Settings /></PrivateRoute>} />
-          <Route path="/search" element={<PrivateRoute user={user}><Search /></PrivateRoute>} />
-          <Route path="*" element={<ErrorPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Toaster
+        position="top-center"
+        toastOptions={{
+          duration: 3500,
+          style: {
+            background: "#171a1f",
+            color: "#f7f5f2",
+            border: "1px solid rgba(255,255,255,.1)",
+            borderRadius: "14px",
+          },
+        }}
+      />
+      {user ? (
+        <Suspense fallback={<Loader />}>
+          <Routes>
+            <Route element={<Navbar />}>
+              <Route index element={<Home />} />
+              <Route path="create-post" element={<CreatePost />} />
+              <Route path="profile" element={<Content />} />
+              <Route path="settings" element={<Settings />} />
+              <Route path="search" element={<Search />} />
+              <Route path="explore" element={<Explore />} />
+              <Route path="notifications" element={<Notifications />} />
+              <Route path="direct-message" element={<DirectMessage />} />
+              <Route path="post/:postId" element={<PostPage />} />
+              <Route path=":username" element={<UserProfile />} />
+              <Route path="*" element={<ErrorPage />} />
+            </Route>
+          </Routes>
+        </Suspense>
+      ) : (
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="*" element={<Login />} />
+        </Routes>
+      )}
     </>
-  )
+  );
 }
 
-export default App
+export default App;

@@ -1,106 +1,118 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
-import { useAuth } from "../../auth/Auth";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import {
+  BellIcon,
+  ChatBubbleLeftRightIcon,
+  HomeIcon,
+  MagnifyingGlassIcon,
+  PlusIcon,
+  UserCircleIcon,
+} from "@heroicons/react/24/outline";
+import {
+  BellIcon as BellSolid,
+  ChatBubbleLeftRightIcon as ChatSolid,
+  HomeIcon as HomeSolid,
+  MagnifyingGlassIcon as SearchSolid,
+  UserCircleIcon as UserSolid,
+} from "@heroicons/react/24/solid";
+import { useAuth, supabase } from "../../auth/Auth";
+import Avatar from "../Avatar/Avatar";
+
+const navigation = [
+  { to: "/", label: "Home", icon: HomeIcon, activeIcon: HomeSolid, end: true },
+  { to: "/explore", label: "Explore", icon: MagnifyingGlassIcon, activeIcon: SearchSolid },
+  { to: "/direct-message", label: "Messages", icon: ChatBubbleLeftRightIcon, activeIcon: ChatSolid },
+  { to: "/notifications", label: "Activity", icon: BellIcon, activeIcon: BellSolid },
+  { to: "/profile", label: "Profile", icon: UserCircleIcon, activeIcon: UserSolid },
+];
+
+const routeTitles = {
+  "/": "Home",
+  "/search": "Discover",
+  "/explore": "Explore",
+  "/direct-message": "Messages",
+  "/notifications": "Activity",
+  "/create-post": "New post",
+  "/profile": "Profile",
+  "/settings": "Settings",
+};
 
 export default function Navbar() {
-    const { signOut } = useAuth();
+  const { user, signOut } = useAuth();
+  const location = useLocation();
+  const [profile, setProfile] = useState(null);
 
-    const linkStyles = {
-        nonactive:
-            "flex items-center justify-center md:justify-normal w-full py-1 md:py-0 md:rounded-lg hover:bg-lightgray ease duration-150 active:scale-95",
-        active: "flex items-center justify-center md:justify-normal w-full py-1 md:py-0 md:rounded-lg bg-lightgray ease duration-150 active:scale-95",
-    };
-    return (
-        <>
-            <nav className="fixed bottom-0 w-full md:w-64 bg-background overflow-hidden md:h-full border-t md:border-r md:border-t-0 border-gray px-1 md:p-2.5">
-                <Link
-                    to="/"
-                    className="hidden md:flex items-center justify-left p-4 gap-3 ease duration-150 active:scale-95"
-                >
-                    <img src={"/icons/Snapshare-Purple.png"} className="w-5" />
-                    <h1 className="font-space-mono font-bold text-2xl text-accent">
-                        Snapshare
-                    </h1>
-                </Link>
-                <div className="justify-between justify-items-stretch w-full flex flex-row md:flex-col md:py-4 gap-2">
-                    <NavLink
-                        to="/"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-home"></i>
-                        </span>
-                        <span className="hidden md:block">Home</span>
-                    </NavLink>
-                    <NavLink
-                        to="/search"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-search"></i>
-                        </span>
-                        <span className="hidden md:block">Search</span>
-                    </NavLink>
-                    <NavLink
-                        to="/direct-message"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-chat"></i>
-                        </span>
-                        <span className="hidden md:block">Messages</span>
-                    </NavLink>
-                    <NavLink
-                        to="/create-post"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-add-to-queue"></i>
-                        </span>
-                        <span className="hidden md:block">Create</span>
-                    </NavLink>
-                    <NavLink
-                        to="/something"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-bell"></i>
-                        </span>
-                        <span className="hidden md:block">Notifications</span>
-                    </NavLink>
-                    <NavLink
-                        to="/profile"
-                        className={({ isActive }) =>
-                            isActive ? linkStyles.active : linkStyles.nonactive
-                        }
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-user"></i>
-                        </span>
-                        <span className="hidden md:block">Profile</span>
-                    </NavLink>
-                    <Link
-                        onClick={signOut}
-                        className="flex items-center justify-center md:justify-normal w-full py-1 md:py-0 md:rounded-lg hover:bg-lightgray ease duration-150 active:scale-95"
-                    >
-                        <span className="inline-flex items-center justify-center h-12 w-12 text-2xl md:text-xl text-foreground">
-                            <i class="bx bx-log-out"></i>
-                        </span>
-                        <span className="hidden md:block">Sign Out</span>
-                    </Link>
-                </div>
-            </nav>
-            <Outlet />
-        </>
-    );
+  useEffect(() => {
+    let active = true;
+    supabase
+      .from("public_profiles")
+      .select("username, profile_picture_url")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => active && setProfile(data));
+    return () => { active = false; };
+  }, [user.id]);
+
+  const title = routeTitles[location.pathname] || (location.pathname.startsWith("/post/") ? "Post" : "Profile");
+
+  return (
+    <div className="app-shell">
+      <header className="mobile-header">
+        <Link className="brand-lockup" to="/" aria-label="Snapshare home">
+          <span className="brand-mark">S</span>
+          <span>snapshare</span>
+        </Link>
+        <span className="mobile-header__title">{title}</span>
+        <Link className="icon-button" to="/create-post" aria-label="Create a post"><PlusIcon /></Link>
+      </header>
+
+      <aside className="sidebar">
+        <Link className="brand-lockup" to="/" aria-label="Snapshare home">
+          <span className="brand-mark">S</span>
+          <span>snapshare</span>
+        </Link>
+
+        <nav className="main-nav" aria-label="Main navigation">
+          {navigation.map(({ to, label, icon: Icon, activeIcon: ActiveIcon, end }) => (
+            <NavLink key={to} to={to} end={end} className={({ isActive }) => `nav-item ${isActive ? "nav-item--active" : ""}`}>
+              {({ isActive }) => (
+                <>
+                  {isActive ? <ActiveIcon /> : <Icon />}
+                  <span>{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+
+        <Link className="create-button" to="/create-post"><PlusIcon /><span>Create post</span></Link>
+
+        <div className="sidebar-profile">
+          <Link to="/profile" className="sidebar-profile__user">
+            <Avatar src={profile?.profile_picture_url} name={profile?.username || user.email} size="sm" />
+            <span>
+              <strong>{profile?.username || "Complete profile"}</strong>
+              <small>{user.email}</small>
+            </span>
+          </Link>
+          <button className="sidebar-signout" onClick={signOut}>Sign out</button>
+        </div>
+      </aside>
+
+      <nav className="bottom-nav" aria-label="Mobile navigation">
+        {navigation.map(({ to, label, icon: Icon, activeIcon: ActiveIcon, end }) => (
+          <NavLink key={to} to={to} end={end} className={({ isActive }) => `bottom-nav__item ${isActive ? "bottom-nav__item--active" : ""}`}>
+            {({ isActive }) => (
+              <>
+                {isActive ? <ActiveIcon /> : <Icon />}
+                <span>{label}</span>
+              </>
+            )}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="app-content"><Outlet /></div>
+    </div>
+  );
 }

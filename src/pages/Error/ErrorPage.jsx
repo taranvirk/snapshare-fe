@@ -1,15 +1,17 @@
-export default function ErrorPage({ errorCode }) {
+import { Link } from "react-router-dom";
+import { ArrowLeftIcon } from "@heroicons/react/24/outline";
+import PropTypes from "prop-types";
+
+export default function ErrorPage({ errorCode = "404" }) {
   return (
-    <main className="ml-0 md:ml-64 bg-background h-screen flex flex-col justify-center items-center gap-y-4">
-      {errorCode ? (
-        <h1 className="text-9xl font-black text-accent">{errorCode}!</h1>
-      ) : (
-        <h1 className="text-9xl font-black text-accent">Oops!</h1>
-      )}
-      <div>
-        <h1 className="text-xl font-bold text-center">Sorry, this page isn't available ˙◠˙</h1>
-        <h2 className="text-lg text-center">The link you followed may be broken, or the page may have been removed</h2>
-      </div>
+    <main className="error-page">
+      <div className="error-page__code">{errorCode}</div>
+      <span className="eyebrow">This snap got away</span>
+      <h1>We couldn’t find that page.</h1>
+      <p>The link may be old, or the post has moved somewhere else.</p>
+      <Link className="button button--primary" to="/"><ArrowLeftIcon />Back to your feed</Link>
     </main>
-  )
+  );
 }
+
+ErrorPage.propTypes = { errorCode: PropTypes.oneOfType([PropTypes.string, PropTypes.number]) };

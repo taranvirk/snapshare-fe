@@ -43,6 +43,7 @@ export default function Login() {
           <Auth
             supabaseClient={supabase}
             providers={["google", "discord"]}
+            redirectTo={`${window.location.origin}/`}
             socialLayout="horizontal"
             appearance={{
               theme: ThemeSupa,

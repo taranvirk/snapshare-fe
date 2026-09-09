@@ -1,5 +1,5 @@
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { createClient } from "@supabase/supabase-js";
 import PropTypes from "prop-types";
 
@@ -16,12 +16,16 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) {
-        setUser(data.session?.user ?? null);
-        setLoading(false);
-      }
-    });
+    supabase.auth
+      .getSession()
+      .then(({ data, error }) => {
+        if (error) console.error("Unable to restore the Supabase session:", error);
+        if (mounted) setUser(data.session?.user ?? null);
+      })
+      .catch((error) => console.error("Unable to restore the Supabase session:", error))
+      .finally(() => {
+        if (mounted) setLoading(false);
+      });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
@@ -34,7 +38,13 @@ export const AuthProvider = ({ children }) => {
     };
   }, []);
 
-  const value = useMemo(() => ({ user, signOut: () => supabase.auth.signOut() }), [user]);
+  const signOut = useCallback(async () => {
+    const { error } = await supabase.auth.signOut({ scope: "local" });
+    if (error) throw error;
+    setUser(null);
+  }, []);
+
+  const value = useMemo(() => ({ user, signOut }), [signOut, user]);
 
   if (loading) {
     return <div className="app-loader" role="status" aria-label="Loading Snapshare"><span className="brand-mark brand-mark--pulse">S</span></div>;

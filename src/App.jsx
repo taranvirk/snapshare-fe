@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import { Toaster } from "react-hot-toast";
 import { useAuth } from "./auth/Auth";
 import Navbar from "./components/Navbar/Navbar";
@@ -57,7 +57,7 @@ function App() {
       ) : (
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="*" element={<Login />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       )}
     </>

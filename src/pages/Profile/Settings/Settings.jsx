@@ -16,6 +16,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
   const [emailUpdates, setEmailUpdates] = useState(() => localStorage.getItem("snapshare-email-updates") !== "false");
 
   useEffect(() => {
@@ -37,6 +38,19 @@ export default function Settings() {
     const { error } = await supabase.auth.resetPasswordForEmail(user.email, { redirectTo: `${window.location.origin}/settings` });
     if (error) return toast.error("Couldn't send the reset email.");
     toast.success("Password reset email sent.");
+  };
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully.");
+    } catch (error) {
+      console.error("Unable to sign out:", error);
+      toast.error("Couldn't sign you out. Please try again.");
+      setSigningOut(false);
+    }
   };
 
   const deleteAccount = async () => {
@@ -80,7 +94,7 @@ export default function Settings() {
 
       <section className="settings-card">
         <div className="settings-card__heading"><h2>Session</h2><p>Leave this device or remove your account.</p></div>
-        <button className="settings-action" onClick={signOut}><span><ArrowRightOnRectangleIcon /><span><strong>Sign out</strong><small>You can sign back in at any time</small></span></span><span>→</span></button>
+        <button className="settings-action" onClick={handleSignOut} disabled={signingOut}><span><ArrowRightOnRectangleIcon /><span><strong>{signingOut ? "Signing out…" : "Sign out"}</strong><small>You can sign back in at any time</small></span></span><span>→</span></button>
         <button className="settings-action settings-action--danger" onClick={() => setShowDelete(true)}><span><TrashIcon /><span><strong>Delete account</strong><small>Permanently remove your profile and content</small></span></span><span>→</span></button>
       </section>
 

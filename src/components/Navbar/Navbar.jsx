@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
+import toast from "react-hot-toast";
 import {
   BellIcon,
   ChatBubbleLeftRightIcon,
@@ -41,6 +42,7 @@ export default function Navbar() {
   const { user, signOut } = useAuth();
   const location = useLocation();
   const [profile, setProfile] = useState(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -54,6 +56,19 @@ export default function Navbar() {
   }, [user.id]);
 
   const title = routeTitles[location.pathname] || (location.pathname.startsWith("/post/") ? "Post" : "Profile");
+
+  const handleSignOut = async () => {
+    if (signingOut) return;
+    setSigningOut(true);
+    try {
+      await signOut();
+      toast.success("Signed out successfully.");
+    } catch (error) {
+      console.error("Unable to sign out:", error);
+      toast.error("Couldn't sign you out. Please try again.");
+      setSigningOut(false);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -95,7 +110,9 @@ export default function Navbar() {
               <small>{user.email}</small>
             </span>
           </Link>
-          <button className="sidebar-signout" onClick={signOut}>Sign out</button>
+          <button className="sidebar-signout" onClick={handleSignOut} disabled={signingOut}>
+            {signingOut ? "Signing out…" : "Sign out"}
+          </button>
         </div>
       </aside>
 
